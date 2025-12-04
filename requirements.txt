@@ -1,0 +1,6 @@
+streamlit
+google-api-python-client
+google-auth
+google-cloud-storage
+pandas
+google-search-results
