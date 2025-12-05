@@ -33,12 +33,29 @@ def main():
     
     # Airline filter
     st.sidebar.subheader("Airline Filter")
-    airline_filter = st.sidebar.selectbox(
-        "Filter by Airline (optional)",
-        options=["All Airlines", "American Airlines", "Delta", "United", "Southwest", "JetBlue", "Spirit", "Frontier"],
-        index=0,
-        help="Filter results to show only flights from selected airline"
+    airline_options = ["American Airlines", "Delta", "United", "Southwest", "JetBlue", "Alaska Airlines", "Spirit", "Frontier"]
+    selected_airlines = st.sidebar.multiselect(
+        "Filter by Airlines (optional)",
+        options=airline_options,
+        default=[],
+        help="Select one or more airlines to filter. Leave empty to show all airlines."
     )
+    
+    # Stops filter
+    st.sidebar.subheader("Number of Stops")
+    stops_options = {
+        "Any number of stops": 0,
+        "Nonstop only": 1,
+        "1 stop or fewer": 2,
+        "2 stops or fewer": 3
+    }
+    stops_choice = st.sidebar.selectbox(
+        "Select maximum stops",
+        options=list(stops_options.keys()),
+        index=0,
+        help="Filter flights by number of stops"
+    )
+    stops_value = stops_options[stops_choice]
     
     # Parse destinations
     destinations = [d.strip().upper() for d in destinations_text.split('\n') if d.strip()]
@@ -85,11 +102,12 @@ def main():
             for idx, dest in enumerate(destinations):
                 try:
                     st.caption(f"Searching {departure_city} → {dest}...")
-                    flights_json = search_flights(departure_city, dest, trip['Start'], trip['End'])
+                    flights_json = search_flights(departure_city, dest, trip['Start'], trip['End'], stops_value)
                     
                     # Parse flights for this destination
                     for f in flights_json.get('best_flights', []):
                         for flight in f.get('flights', []):
+                            layovers = f.get('layovers', [])
                             all_flights.append({
                                 'Destination': dest,
                                 'Airline': flight.get('airline'),
@@ -98,13 +116,14 @@ def main():
                                 'Duration': f.get('total_duration'),
                                 'Departure': flight.get('departure_airport', {}).get('time'),
                                 'Arrival': flight.get('arrival_airport', {}).get('time'),
-                                'Layovers': f.get('layovers', [])
+                                'Layovers': len(layovers) if isinstance(layovers, list) else 0
                             })
                     
                     # Also check other_flights if best_flights is empty
                     if not flights_json.get('best_flights'):
                         for f in flights_json.get('other_flights', [])[:5]:  # Limit to 5 from other flights
                             for flight in f.get('flights', []):
+                                layovers = f.get('layovers', [])
                                 all_flights.append({
                                     'Destination': dest,
                                     'Airline': flight.get('airline'),
@@ -113,7 +132,7 @@ def main():
                                     'Duration': f.get('total_duration'),
                                     'Departure': flight.get('departure_airport', {}).get('time'),
                                     'Arrival': flight.get('arrival_airport', {}).get('time'),
-                                    'Layovers': f.get('layovers', [])
+                                    'Layovers': len(layovers) if isinstance(layovers, list) else 0
                                 })
                     
                 except Exception as e:
@@ -135,17 +154,22 @@ def main():
             with st.expander("📋 Airlines found in results"):
                 st.write(sorted(unique_airlines))
             
-            # Apply airline filter if selected
-            if airline_filter != "All Airlines":
+            # Apply airline filter if any airlines are selected
+            if selected_airlines:
                 original_count = len(flights_df)
-                # Make filter more flexible - match partial names
-                filter_word = airline_filter.split()[0]  # Get first word (e.g., "American" from "American Airlines")
-                flights_df = flights_df[flights_df['Airline'].str.contains(filter_word, case=False, na=False)]
+                # Filter to include rows where airline matches any of the selected airlines (partial match)
+                def matches_any_airline(airline_name):
+                    if pd.isna(airline_name):
+                        return False
+                    airline_str = str(airline_name).lower()
+                    return any(selected.split()[0].lower() in airline_str for selected in selected_airlines)
+                
+                flights_df = flights_df[flights_df['Airline'].apply(matches_any_airline)]
                 
                 if len(flights_df) == 0 and original_count > 0:
-                    st.warning(f"⚠️ No flights found matching '{airline_filter}'. Check the airlines list above to see available options.")
+                    st.warning(f"⚠️ No flights found matching selected airlines: {', '.join(selected_airlines)}. Check the airlines list above.")
                 elif len(flights_df) < original_count:
-                    st.info(f"🔍 Filtered to {airline_filter}: showing {len(flights_df)} of {original_count} flights")
+                    st.info(f"🔍 Filtered to {', '.join(selected_airlines)}: showing {len(flights_df)} of {original_count} flights")
             
             # Sort by price
             flights_df = flights_df.sort_values('Price (USD)', ascending=True)

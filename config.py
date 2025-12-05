@@ -13,7 +13,7 @@ BUCKET_PATH = 'serpapi_results/serpapi/'
 DEFAULT_DEPARTURE = 'DFW'
 DEFAULT_DESTINATIONS = [
     'LAX',  # Los Angeles
-    'NYC',  # New York City
+    'JFK',  # New York City
     'MIA',  # Miami
     'LAS',  # Las Vegas
     'SEA',  # Seattle
